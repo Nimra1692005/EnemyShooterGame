@@ -5,346 +5,599 @@
 <title>Enemy Shooter Game</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif; }
-  canvas { border: 2px solid #00ff88; display: block; }
-  #ui { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 800px; pointer-events: none; }
-  #overlay { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 800px; height: 600px; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.85); color: white; font-size: 28px; z-index: 10; }
-  #overlay h1 { font-size: 48px; margin-bottom: 20px; }
-  #overlay p { font-size: 20px; margin: 8px 0; color: #aaa; }
-  #overlay button { margin-top: 30px; padding: 14px 40px; font-size: 22px; background: #00ff88; color: #000; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-  #overlay button:hover { background: #00cc66; }
-  #winMsg { color: #00ff88; }
-  #loseMsg { color: #ff4444; }
+  body { background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif; overflow: hidden; }
+  canvas { display: block; image-rendering: pixelated; }
+  #overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    background: rgba(0,0,0,0.88); color: white; z-index: 10;
+  }
+  #overlay h1 { font-size: 52px; margin-bottom: 16px; }
+  #overlay p  { font-size: 18px; margin: 6px 0; color: #ccc; }
+  #overlay button {
+    margin-top: 28px; padding: 14px 44px; font-size: 22px;
+    background: #00cc66; color: #000; border: none; border-radius: 10px;
+    cursor: pointer; font-weight: bold; letter-spacing: 1px;
+  }
+  #overlay button:hover { background: #00ff88; }
 </style>
 </head>
 <body>
-
-<div style="position:relative;">
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
-  <div id="overlay">
-    <h1 style="color:#00ff88;">🎮 Enemy Shooter</h1>
-    <p>Move: <b>WASD / Arrow Keys</b></p>
-    <p>Collect glowing gems to score points</p>
-    <p>Avoid the enemy's red projectiles!</p>
-    <p>Collect <b>10 gems</b> to WIN</p>
-    <p>You have <b>5 lives</b> — don't get hit!</p>
-    <button onclick="startGame()">▶ Start Game</button>
-  </div>
+<canvas id="c"></canvas>
+<div id="overlay">
+  <h1 style="color:#00ff88;">🎮 Enemy Shooter</h1>
+  <p><b>WASD / Arrow Keys</b> — Move your character</p>
+  <p>Collect glowing <b style="color:#ffe066;">★ gems</b> to score points</p>
+  <p>Dodge the <b style="color:#ff4444;">red enemy's</b> projectiles!</p>
+  <p style="margin-top:12px;">Collect <b>10 gems</b> to WIN &nbsp;|&nbsp; You have <b>5 lives</b></p>
+  <button onclick="startGame()">▶ Start Game</button>
 </div>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const overlay = document.getElementById('overlay');
+// ════════════════════════════════════════════════
+//  SETUP
+// ════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width  = 800;
+const H = canvas.height = 600;
 
-// ─── Game State ───────────────────────────────────────────────
-let gameRunning = false;
-let score = 0;
-let lives = 5;
-let scoreToWin = 10;
-let animId;
+const TILE   = 48;           // tile size in pixels
+const MAP_W  = 30;           // tiles wide
+const MAP_H  = 24;           // tiles tall
+const WORLD_W = MAP_W * TILE;
+const WORLD_H = MAP_H * TILE;
 
-// ─── Player ───────────────────────────────────────────────────
-const player = {
-  x: 400, y: 300, r: 18, speed: 3.5,
-  color: '#00ccff', invincible: 0
-};
+// ── Tile types ──
+const GRASS = 0, DIRT = 1, STONE = 2, WATER = 3;
+const TILE_COLORS = ['#4a7c3f','#8b6914','#888','#1a6699'];
+const TILE_DARK   = ['#3a6030','#7a5a10','#666','#155588'];
 
-// ─── Enemy ────────────────────────────────────────────────────
-const enemy = {
-  x: 680, y: 80, r: 22,
-  color: '#ff4444', angle: 0,
-  shootTimer: 0, shootInterval: 120
-};
-
-// ─── Arrays ───────────────────────────────────────────────────
-let projectiles = [];
-let collectibles = [];
-let particles   = [];
-
-// ─── Input ────────────────────────────────────────────────────
-const keys = {};
-document.addEventListener('keydown', e => keys[e.key] = true);
-document.addEventListener('keyup',   e => keys[e.key] = false);
-
-// ─── Spawning ─────────────────────────────────────────────────
-let spawnTimer = 0;
-const spawnInterval = 180; // frames
-
-function spawnCollectible() {
-  if (collectibles.length >= 5) return;
-  const margin = 40;
-  collectibles.push({
-    x: margin + Math.random() * (canvas.width  - margin * 2),
-    y: margin + Math.random() * (canvas.height - margin * 2),
-    r: 14, pulse: Math.random() * Math.PI * 2,
-    color: `hsl(${Math.floor(Math.random()*360)},100%,60%)`
-  });
+// ── Generate simple tile map ──
+const map = [];
+for (let r = 0; r < MAP_H; r++) {
+  map[r] = [];
+  for (let c = 0; c < MAP_W; c++) {
+    const n = Math.random();
+    if (n < 0.65)      map[r][c] = GRASS;
+    else if (n < 0.78) map[r][c] = DIRT;
+    else if (n < 0.88) map[r][c] = STONE;
+    else               map[r][c] = WATER;
+  }
 }
 
-// ─── Start ────────────────────────────────────────────────────
+// ── Camera ──
+const cam = { x: 0, y: 0 };
+
+// ════════════════════════════════════════════════
+//  ENTITIES
+// ════════════════════════════════════════════════
+const player = {
+  x: WORLD_W/2, y: WORLD_H/2,
+  w: 28, h: 28,
+  speed: 3, angle: 0,
+  invincible: 0, alive: true,
+  // animation
+  walkFrame: 0, walkTimer: 0, moving: false
+};
+
+const enemy = {
+  x: WORLD_W * 0.8, y: WORLD_H * 0.2,
+  w: 30, h: 30,
+  angle: 0,
+  shootTimer: 0, shootInterval: 110,
+  alive: true
+};
+
+let projectiles = [];
+let collectibles = [];
+let particles    = [];
+let spawnTimer   = 0;
+let score        = 0;
+let lives        = 5;
+const SCORE_WIN  = 10;
+let gameRunning  = false;
+let animId;
+
+// ════════════════════════════════════════════════
+//  INPUT
+// ════════════════════════════════════════════════
+const keys = {};
+addEventListener('keydown', e => { keys[e.key] = true;  e.preventDefault(); });
+addEventListener('keyup',   e => { keys[e.key] = false; });
+
+// ════════════════════════════════════════════════
+//  START
+// ════════════════════════════════════════════════
 function startGame() {
   score = 0; lives = 5;
   projectiles = []; collectibles = []; particles = [];
-  player.x = 400; player.y = 300; player.invincible = 0;
-  enemy.x = 680;  enemy.y = 80;
+  player.x = WORLD_W/2; player.y = WORLD_H/2;
+  player.invincible = 0; player.alive = true; player.angle = 0;
+  enemy.x = WORLD_W * 0.8; enemy.y = WORLD_H * 0.2; enemy.alive = true;
   spawnTimer = 0;
-  overlay.style.display = 'none';
+  document.getElementById('overlay').style.display = 'none';
   gameRunning = true;
-  // spawn 3 collectibles immediately
-  for (let i = 0; i < 3; i++) spawnCollectible();
+  for (let i = 0; i < 4; i++) spawnCollectible();
   cancelAnimationFrame(animId);
   loop();
 }
 
-// ─── Main Loop ────────────────────────────────────────────────
+// ════════════════════════════════════════════════
+//  MAIN LOOP
+// ════════════════════════════════════════════════
 function loop() {
   if (!gameRunning) return;
   update();
-  draw();
+  render();
   animId = requestAnimationFrame(loop);
 }
 
-// ─── Update ───────────────────────────────────────────────────
+// ════════════════════════════════════════════════
+//  UPDATE
+// ════════════════════════════════════════════════
 function update() {
+  // ── Player movement ──
+  let dx = 0, dy = 0;
+  if (keys['a'] || keys['ArrowLeft'])  dx -= 1;
+  if (keys['d'] || keys['ArrowRight']) dx += 1;
+  if (keys['w'] || keys['ArrowUp'])    dy -= 1;
+  if (keys['s'] || keys['ArrowDown'])  dy += 1;
 
-  // Player movement
-  if (keys['a'] || keys['ArrowLeft'])  player.x -= player.speed;
-  if (keys['d'] || keys['ArrowRight']) player.x += player.speed;
-  if (keys['w'] || keys['ArrowUp'])    player.y -= player.speed;
-  if (keys['s'] || keys['ArrowDown'])  player.y += player.speed;
+  player.moving = dx !== 0 || dy !== 0;
 
-  // Clamp player to canvas
-  player.x = Math.max(player.r, Math.min(canvas.width  - player.r, player.x));
-  player.y = Math.max(player.r, Math.min(canvas.height - player.r, player.y));
+  if (player.moving) {
+    // normalize diagonal
+    const len = Math.sqrt(dx*dx + dy*dy);
+    dx /= len; dy /= len;
+    player.x += dx * player.speed;
+    player.y += dy * player.speed;
+    player.angle = Math.atan2(dy, dx);
+    // walk animation
+    player.walkTimer++;
+    if (player.walkTimer > 8) { player.walkTimer = 0; player.walkFrame = (player.walkFrame+1)%4; }
+  }
 
-  // Invincibility frames
+  // Clamp to world
+  player.x = Math.max(16, Math.min(WORLD_W - 16, player.x));
+  player.y = Math.max(16, Math.min(WORLD_H - 16, player.y));
+
+  // Invincibility
   if (player.invincible > 0) player.invincible--;
 
+  // ── Camera follow player (centered) ──
+  cam.x = player.x - W/2;
+  cam.y = player.y - H/2;
+  cam.x = Math.max(0, Math.min(WORLD_W - W, cam.x));
+  cam.y = Math.max(0, Math.min(WORLD_H - H, cam.y));
+
   // ── Enemy faces player ──
-  const dx = player.x - enemy.x;
-  const dy = player.y - enemy.y;
-  enemy.angle = Math.atan2(dy, dx);
+  const edx = player.x - enemy.x;
+  const edy = player.y - enemy.y;
+  enemy.angle = Math.atan2(edy, edx);
 
   // ── Enemy shoots ──
   enemy.shootTimer++;
   if (enemy.shootTimer >= enemy.shootInterval) {
     enemy.shootTimer = 0;
-    const speed = 3.8;
-    const dist  = Math.sqrt(dx*dx + dy*dy);
-    projectiles.push({
-      x: enemy.x + Math.cos(enemy.angle) * (enemy.r + 5),
-      y: enemy.y + Math.sin(enemy.angle) * (enemy.r + 5),
-      vx: (dx / dist) * speed,
-      vy: (dy / dist) * speed,
-      r: 8, life: 220
-    });
+    const dist = Math.sqrt(edx*edx + edy*edy);
+    if (dist > 0) {
+      projectiles.push({
+        x: enemy.x + Math.cos(enemy.angle)*20,
+        y: enemy.y + Math.sin(enemy.angle)*20,
+        vx: (edx/dist)*4.5, vy: (edy/dist)*4.5,
+        r: 7, life: 260
+      });
+    }
   }
 
   // ── Move projectiles ──
-  for (let i = projectiles.length - 1; i >= 0; i--) {
+  for (let i = projectiles.length-1; i >= 0; i--) {
     const p = projectiles[i];
     p.x += p.vx; p.y += p.vy; p.life--;
-    if (p.life <= 0 || p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
-      projectiles.splice(i, 1); continue;
+    if (p.life <= 0 || p.x<0 || p.x>WORLD_W || p.y<0 || p.y>WORLD_H) {
+      projectiles.splice(i,1); continue;
     }
-    // Hit player
-    if (player.invincible === 0 && dist2(p, player) < (p.r + player.r) * (p.r + player.r)) {
-      projectiles.splice(i, 1);
-      player.invincible = 90;
-      lives--;
-      spawnParticles(player.x, player.y, '#ff4444');
-      if (lives <= 0) { endGame(false); return; }
+    if (player.invincible === 0) {
+      if (Math.abs(p.x-player.x)<18 && Math.abs(p.y-player.y)<18) {
+        projectiles.splice(i,1);
+        player.invincible = 90;
+        lives--;
+        spawnParticles(player.x, player.y, '#ff4444', 14);
+        if (lives <= 0) { endGame(false); return; }
+      }
     }
   }
 
   // ── Spawn collectibles ──
   spawnTimer++;
-  if (spawnTimer >= spawnInterval) { spawnTimer = 0; spawnCollectible(); }
+  if (spawnTimer >= 180) { spawnTimer = 0; spawnCollectible(); }
 
-  // ── Pulse collectibles + check collect ──
-  for (let i = collectibles.length - 1; i >= 0; i--) {
+  // ── Collect gems ──
+  for (let i = collectibles.length-1; i >= 0; i--) {
     const c = collectibles[i];
-    c.pulse += 0.07;
-    if (dist2(c, player) < (c.r + player.r) * (c.r + player.r)) {
-      collectibles.splice(i, 1);
+    c.pulse += 0.08;
+    if (Math.abs(c.x-player.x)<22 && Math.abs(c.y-player.y)<22) {
+      collectibles.splice(i,1);
       score++;
-      spawnParticles(c.x, c.y, '#ffff00');
-      if (score >= scoreToWin) { endGame(true); return; }
+      spawnParticles(c.x, c.y, '#ffe066', 16);
+      if (score >= SCORE_WIN) { endGame(true); return; }
     }
   }
 
   // ── Particles ──
-  for (let i = particles.length - 1; i >= 0; i--) {
+  for (let i = particles.length-1; i >= 0; i--) {
     const p = particles[i];
     p.x += p.vx; p.y += p.vy;
+    p.vx *= 0.93; p.vy *= 0.93;
     p.life--;
-    p.vx *= 0.95; p.vy *= 0.95;
-    if (p.life <= 0) particles.splice(i, 1);
+    if (p.life<=0) particles.splice(i,1);
   }
 }
 
-// ─── Draw ─────────────────────────────────────────────────────
-function draw() {
-  // Background
-  ctx.fillStyle = '#0a0a1a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+// ════════════════════════════════════════════════
+//  RENDER
+// ════════════════════════════════════════════════
+function render() {
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  ctx.translate(-cam.x, -cam.y);
 
-  // Grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x < canvas.width; x += 40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); }
-  for (let y = 0; y < canvas.height; y += 40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
+  // ── Draw tiles ──
+  const startCol = Math.max(0, Math.floor(cam.x/TILE));
+  const endCol   = Math.min(MAP_W, Math.ceil((cam.x+W)/TILE));
+  const startRow = Math.max(0, Math.floor(cam.y/TILE));
+  const endRow   = Math.min(MAP_H, Math.ceil((cam.y+H)/TILE));
 
-  // ── Collectibles ──
-  collectibles.forEach(c => {
-    const s = 1 + Math.sin(c.pulse) * 0.25;
-    ctx.save();
-    ctx.translate(c.x, c.y);
-    ctx.scale(s, s);
-    // Glow
-    ctx.shadowColor = c.color;
-    ctx.shadowBlur  = 18;
-    ctx.fillStyle   = c.color;
-    // Draw gem (diamond shape)
-    ctx.beginPath();
-    ctx.moveTo(0, -c.r);
-    ctx.lineTo(c.r * 0.7, 0);
-    ctx.lineTo(0, c.r);
-    ctx.lineTo(-c.r * 0.7, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.restore();
-  });
+  for (let r = startRow; r < endRow; r++) {
+    for (let c = startCol; c < endCol; c++) {
+      const t = map[r][c];
+      const tx = c*TILE, ty = r*TILE;
+      ctx.fillStyle = TILE_COLORS[t];
+      ctx.fillRect(tx, ty, TILE, TILE);
+      // tile border
+      ctx.fillStyle = TILE_DARK[t];
+      ctx.fillRect(tx, ty, TILE, 1);
+      ctx.fillRect(tx, ty, 1, TILE);
+      // water waves
+      if (t === WATER) {
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(tx+6, ty+14, 18, 3);
+        ctx.fillRect(tx+22, ty+28, 14, 3);
+      }
+      // stone detail
+      if (t === STONE) {
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(tx+8, ty+8, 14, 14);
+      }
+    }
+  }
 
   // ── Particles ──
   particles.forEach(p => {
     ctx.globalAlpha = p.life / p.maxLife;
-    ctx.fillStyle   = p.color;
+    ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
     ctx.fill();
   });
   ctx.globalAlpha = 1;
 
-  // ── Projectiles ──
-  projectiles.forEach(p => {
-    ctx.shadowColor = '#ff4444';
-    ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#ff6666';
+  // ── Collectibles ──
+  collectibles.forEach(c => {
+    const bob = Math.sin(c.pulse) * 3;
+    const grd = ctx.createRadialGradient(c.x, c.y+bob, 2, c.x, c.y+bob, 14);
+    grd.addColorStop(0, '#ffffff');
+    grd.addColorStop(0.4, '#ffe066');
+    grd.addColorStop(1, '#ff9900');
+    // glow
+    ctx.shadowColor = '#ffe066';
+    ctx.shadowBlur  = 18;
+    ctx.fillStyle   = grd;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    // star shape
+    for (let i=0; i<5; i++) {
+      const a  = (i*4*Math.PI/5) - Math.PI/2 + c.pulse*0.3;
+      const a2 = ((i*4+2)*Math.PI/5) - Math.PI/2 + c.pulse*0.3;
+      if (i===0) ctx.moveTo(c.x + Math.cos(a)*13, c.y+bob + Math.sin(a)*13);
+      else        ctx.lineTo(c.x + Math.cos(a)*13, c.y+bob + Math.sin(a)*13);
+      ctx.lineTo(c.x + Math.cos(a2)*6, c.y+bob + Math.sin(a2)*6);
+    }
+    ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;
   });
 
-  // ── Enemy ──
-  ctx.save();
-  ctx.translate(enemy.x, enemy.y);
-  ctx.rotate(enemy.angle);
-  // Body
-  ctx.shadowColor = '#ff4444';
-  ctx.shadowBlur  = 20;
-  ctx.fillStyle   = '#cc2222';
-  ctx.beginPath();
-  ctx.arc(0, 0, enemy.r, 0, Math.PI * 2);
-  ctx.fill();
-  // Eye (direction indicator)
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(enemy.r * 0.5, 0, 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.arc(enemy.r * 0.6, 0, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.restore();
+  // ── Projectiles ──
+  projectiles.forEach(p => {
+    ctx.shadowColor = '#ff2200';
+    ctx.shadowBlur  = 14;
+    // trail
+    ctx.fillStyle = 'rgba(255,100,0,0.3)';
+    ctx.beginPath();
+    ctx.arc(p.x - p.vx*3, p.y - p.vy*3, p.r*0.7, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ff4400';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r*0.45, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  });
 
-  // ── Player ──
-  ctx.save();
-  ctx.translate(player.x, player.y);
-  // Invincibility flicker
-  if (player.invincible > 0 && Math.floor(player.invincible / 6) % 2 === 0) {
-    ctx.globalAlpha = 0.3;
+  // ── Draw Enemy ──
+  drawCharacter(enemy.x, enemy.y, enemy.angle, false, 0, false);
+
+  // ── Draw Player ──
+  const flicker = player.invincible > 0 && Math.floor(player.invincible/7)%2===0;
+  if (!flicker) {
+    drawCharacter(player.x, player.y, player.angle, true, player.walkFrame, player.moving);
   }
-  ctx.shadowColor = '#00ccff';
-  ctx.shadowBlur  = 20;
-  ctx.fillStyle   = '#00ccff';
-  ctx.beginPath();
-  ctx.arc(0, 0, player.r, 0, Math.PI * 2);
-  ctx.fill();
-  // Inner circle
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(0, 0, player.r * 0.4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur  = 0;
-  ctx.globalAlpha = 1;
+
   ctx.restore();
 
-  // ── HUD ──
-  // Score
-  ctx.fillStyle = '#ffffff';
-  ctx.font      = 'bold 22px Arial';
-  ctx.fillText(`Score: ${score} / ${scoreToWin}`, 16, 32);
-
-  // Lives (hearts)
-  ctx.font = '22px Arial';
-  let heartsText = '';
-  for (let i = 0; i < lives; i++) heartsText += '❤️ ';
-  ctx.fillText(heartsText, 16, 62);
-
-  // Enemy label
-  ctx.fillStyle = '#ff6666';
-  ctx.font      = 'bold 13px Arial';
-  ctx.fillText('ENEMY', enemy.x - 22, enemy.y - enemy.r - 8);
-
-  // Score bar
-  const barW = 200;
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(canvas.width - barW - 16, 14, barW, 16);
-  ctx.fillStyle = '#00ff88';
-  ctx.fillRect(canvas.width - barW - 16, 14, barW * (score / scoreToWin), 16);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth   = 1;
-  ctx.strokeRect(canvas.width - barW - 16, 14, barW, 16);
-  ctx.fillStyle = '#fff';
-  ctx.font      = '12px Arial';
-  ctx.fillText('Progress', canvas.width - barW - 16, 46);
+  // ── HUD (screen space, not world space) ──
+  drawHUD();
 }
 
-// ─── End Game ─────────────────────────────────────────────────
+// ════════════════════════════════════════════════
+//  DRAW CHARACTER (top-down RPG style)
+// ════════════════════════════════════════════════
+function drawCharacter(x, y, angle, isPlayer, walkFrame, moving) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle + Math.PI/2);
+
+  const shadow_color = isPlayer ? '#00aaff' : '#ff2200';
+
+  // Shadow on ground
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, 8, 13, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  if (isPlayer) {
+    // ── PLAYER CHARACTER ──
+
+    // Legs (walking animation)
+    const legSwing = moving ? Math.sin(walkFrame * Math.PI/2) * 6 : 0;
+    // Left leg
+    ctx.fillStyle = '#1a4fa8';
+    ctx.beginPath();
+    ctx.ellipse(-5, 6 + legSwing, 4, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Right leg
+    ctx.fillStyle = '#1a4fa8';
+    ctx.beginPath();
+    ctx.ellipse(5, 6 - legSwing, 4, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = '#2266cc';
+    ctx.shadowColor = '#00aaff';
+    ctx.shadowBlur  = 12;
+    ctx.beginPath();
+    ctx.roundRect(-9, -8, 18, 16, 4);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Arms
+    const armSwing = moving ? Math.sin(walkFrame * Math.PI/2) * 5 : 0;
+    ctx.fillStyle = '#2266cc';
+    ctx.beginPath();
+    ctx.ellipse(-12, -2 + armSwing, 4, 5, -0.3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(12, -2 - armSwing, 4, 5, 0.3, 0, Math.PI*2);
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = '#f5c58a';
+    ctx.shadowColor = '#00aaff';
+    ctx.shadowBlur  = 8;
+    ctx.beginPath();
+    ctx.arc(0, -14, 10, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Hair
+    ctx.fillStyle = '#5c3210';
+    ctx.beginPath();
+    ctx.arc(0, -20, 9, Math.PI, 0);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(-4, -14, 2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 4, -14, 2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-3.5, -14.5, 0.8, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 4.5, -14.5, 0.8, 0, Math.PI*2); ctx.fill();
+
+    // Name tag
+    ctx.rotate(-(angle + Math.PI/2));
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(-22, -32, 44, 14);
+    ctx.fillStyle = '#00ffcc';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PLAYER', 0, -21);
+
+  } else {
+    // ── ENEMY CHARACTER ──
+
+    // Legs
+    const legSwing = Math.sin(Date.now()*0.008) * 5;
+    ctx.fillStyle = '#8b0000';
+    ctx.beginPath();
+    ctx.ellipse(-5, 7 + legSwing, 4, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#8b0000';
+    ctx.beginPath();
+    ctx.ellipse(5, 7 - legSwing, 4, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = '#cc2222';
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur  = 14;
+    ctx.beginPath();
+    ctx.roundRect(-10, -9, 20, 17, 4);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Spikes on body
+    ctx.fillStyle = '#ff6600';
+    for (let s = -1; s <= 1; s += 2) {
+      ctx.beginPath();
+      ctx.moveTo(s*10, -4);
+      ctx.lineTo(s*16, -8);
+      ctx.lineTo(s*10, 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Arms
+    ctx.fillStyle = '#cc2222';
+    ctx.beginPath();
+    ctx.ellipse(-13, -3, 4, 6, -0.3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(13, -3, 4, 6, 0.3, 0, Math.PI*2);
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = '#cc2222';
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur  = 10;
+    ctx.beginPath();
+    ctx.arc(0, -15, 11, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Horns
+    ctx.fillStyle = '#ff6600';
+    ctx.beginPath();
+    ctx.moveTo(-7, -22); ctx.lineTo(-4, -30); ctx.lineTo(-1, -22);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(1, -22); ctx.lineTo(4, -30); ctx.lineTo(7, -22);
+    ctx.closePath(); ctx.fill();
+
+    // Eyes (glowing)
+    ctx.fillStyle = '#ff0';
+    ctx.shadowColor = '#ffff00';
+    ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(-4, -15, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 4, -15, 3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(-4, -15, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 4, -15, 1.5, 0, Math.PI*2); ctx.fill();
+
+    // Label
+    ctx.rotate(-(angle + Math.PI/2));
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(-22, -34, 44, 14);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ENEMY', 0, -23);
+  }
+
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════
+//  HUD
+// ════════════════════════════════════════════════
+function drawHUD() {
+  // Background bar
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(0, 0, W, 56);
+
+  // Score
+  ctx.fillStyle = '#ffe066';
+  ctx.font = 'bold 22px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText(`⭐ Score: ${score} / ${SCORE_WIN}`, 16, 36);
+
+  // Lives hearts
+  ctx.font = '22px Arial';
+  ctx.textAlign = 'left';
+  let hearts = '';
+  for (let i = 0; i < lives; i++) hearts += '❤️';
+  for (let i = lives; i < 5; i++) hearts += '🖤';
+  ctx.fillText(hearts, 260, 36);
+
+  // Progress bar
+  const bx = W-220, by = 14, bw = 200, bh = 20;
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.fillRect(bx, by, bw, bh);
+  const prog = score / SCORE_WIN;
+  const grd = ctx.createLinearGradient(bx,0,bx+bw,0);
+  grd.addColorStop(0,'#00ff88'); grd.addColorStop(1,'#00ccff');
+  ctx.fillStyle = grd;
+  ctx.fillRect(bx, by, bw*prog, bh);
+  ctx.strokeStyle = '#ffffff44';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${Math.round(prog*100)}%`, bx+bw/2, by+14);
+
+  // Controls hint
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('Move: WASD / Arrow Keys', 16, H-10);
+}
+
+// ════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════
+function spawnCollectible() {
+  if (collectibles.length >= 6) return;
+  const margin = 80;
+  let x, y, tries = 0;
+  do {
+    x = margin + Math.random()*(WORLD_W-margin*2);
+    y = margin + Math.random()*(WORLD_H-margin*2);
+    tries++;
+  } while (tries < 20 && Math.abs(x-player.x)<100 && Math.abs(y-player.y)<100);
+  collectibles.push({ x, y, pulse: Math.random()*Math.PI*2 });
+}
+
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random()*Math.PI*2;
+    const s = 1.5 + Math.random()*3;
+    particles.push({
+      x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+      r: 2+Math.random()*3, color,
+      life: 35+Math.random()*20, maxLife: 55
+    });
+  }
+}
+
 function endGame(won) {
   gameRunning = false;
   cancelAnimationFrame(animId);
-  overlay.innerHTML = won
-    ? `<h1 id="winMsg">🏆 YOU WIN!</h1>
-       <p style="color:#00ff88;font-size:24px;">Score: ${score} / ${scoreToWin}</p>
-       <p style="color:#aaa;">You survived and collected all gems!</p>
+  const ol = document.getElementById('overlay');
+  ol.innerHTML = won
+    ? `<h1 style="color:#00ff88">🏆 YOU WIN!</h1>
+       <p style="color:#ffe066;font-size:22px">Score: ${score} / ${SCORE_WIN}</p>
+       <p style="color:#aaa">You collected all gems and survived!</p>
        <button onclick="startGame()">▶ Play Again</button>`
-    : `<h1 id="loseMsg">💀 GAME OVER</h1>
-       <p style="color:#ff4444;font-size:24px;">Score: ${score} / ${scoreToWin}</p>
-       <p style="color:#aaa;">You were hit too many times!</p>
+    : `<h1 style="color:#ff4444">💀 GAME OVER</h1>
+       <p style="color:#ff8888;font-size:22px">Score: ${score} / ${SCORE_WIN}</p>
+       <p style="color:#aaa">The enemy defeated you!</p>
        <button onclick="startGame()">▶ Try Again</button>`;
-  overlay.style.display = 'flex';
-}
-
-// ─── Helpers ──────────────────────────────────────────────────
-function dist2(a, b) { return (a.x-b.x)**2 + (a.y-b.y)**2; }
-
-function spawnParticles(x, y, color) {
-  for (let i = 0; i < 12; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 1 + Math.random() * 3;
-    particles.push({
-      x, y, r: 3 + Math.random() * 3,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      color, life: 40, maxLife: 40
-    });
-  }
+  ol.style.display = 'flex';
 }
 </script>
 </body>
