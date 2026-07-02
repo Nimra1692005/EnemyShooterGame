@@ -1,0 +1,22 @@
+# Unreal Engine
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.suo
+*.xcworkspace
+*.xcodeproj
+*.sln
+*.user
+
+# Keep these
+!Source/
+!Config/
+!Content/
+!.kiro/
+!*.uproject
