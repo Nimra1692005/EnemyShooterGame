@@ -81,7 +81,7 @@ canvas{display:block;}
     </div>
   </div>
   <div class="col" style="align-items:center;">
-    <div style="font-size:13px;color:#aaa;" id="weaponText">🗡️ Sword</div>
+    <div style="font-size:13px;color:#ffe066;" id="weaponText">🗡️ Sword | Collect 3 gems = 🔫 Gun</div>
     <div class="bar-row">XP
       <div class="bar-bg"><div class="bar-fill" id="xpBar" style="width:0%;background:linear-gradient(to right,#aa00ff,#ff00ff)"></div></div>
     </div>
@@ -384,7 +384,10 @@ addEventListener('keydown',e=>{
   if(e.key==='4')selectSlot(3);
   if(e.key==='5')selectSlot(4);
   if(e.key==='e'||e.key==='E') removeNearbyBlock();
-  if(e.key===' '){ e.preventDefault(); doRoll(); }
+  if(e.key===' '){ e.preventDefault();
+    if(player.hasGun){ selectSlot(1); handleAttack(); }
+    else doRoll();
+  }
   // F key = attack/use current weapon
   if(e.key==='f'||e.key==='F'){ e.preventDefault(); handleAttack(); }
   // Q = quick sword swing
@@ -628,11 +631,8 @@ function _createGem(x,z,type){
   gems.push({x,z,mesh:g,time:Math.random()*Math.PI*2,type});
 }
 
+// Spawn 4 normal gems at start only
 for(let i=0;i<4;i++) spawnGem();
-// Spawn gun pickup RIGHT next to player at start
-_createGem(2,2,GEM_GUN);
-_createGem(-2,2,GEM_SPEED);
-_createGem(2,-2,GEM_SHIELD);
 
 // ════════════════════════════════════════
 // PARTICLES
@@ -779,9 +779,6 @@ function startGame(){
   enemyGroup.position.set(15,0,-15);
   bossHPDiv.style.display='none';
   for(let i=0;i<4;i++) spawnGem();
-  _createGem(2,2,GEM_GUN);
-  _createGem(-2,2,GEM_SPEED);
-  _createGem(2,-2,GEM_SHIELD);
   selectSlot(0);
   updateHUD();updateQuestUI();
   document.getElementById('overlay').style.display='none';
@@ -939,7 +936,15 @@ function update(t){
       if(c.type===GEM_NORMAL){
         score++;quests.gems++;
         updateHUD();updateQuestUI();
-        showMsg('⭐ +1 Score!');
+        // 3 gems = gun unlock
+        if(score===3&&!player.hasGun){
+          player.hasGun=true;
+          selectSlot(1);
+          document.getElementById('pu-gun').style.display='flex';
+          showMsg('🔫 3 Gems! GUN UNLOCKED! Space = Shoot!');
+        } else {
+          showMsg('⭐ +1 Score! ('+score+'/3 gems for Gun)');
+        }
         if(score>=SCORE_WIN&&!boss.active){ showMsg('🎯 Score reached! Complete quests for BOSS!'); }
       } else if(c.type===GEM_GUN){
         player.hasGun=true;
