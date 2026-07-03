@@ -2,35 +2,125 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Enemy Shooter Game</title>
+<title>Enemy Shooter — Enhanced</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif; overflow: hidden; }
-  canvas { display: block; image-rendering: pixelated; }
+
+  body {
+    background: #060b18;
+    display: flex; justify-content: center; align-items: center;
+    height: 100vh; font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block; image-rendering: pixelated;
+    border-radius: 10px;
+    box-shadow: 0 0 0 1px rgba(0,200,255,0.15),
+                0 0 40px rgba(0,150,255,0.12),
+                0 0 80px rgba(0,80,200,0.08);
+  }
+
+  /* ── OVERLAY ── */
   #overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     display: flex; flex-direction: column; justify-content: center; align-items: center;
-    background: rgba(0,0,0,0.88); color: white; z-index: 10;
+    background: radial-gradient(ellipse at center, rgba(0,12,35,0.97) 0%, rgba(0,0,0,0.99) 100%);
+    color: white; z-index: 10;
+    transition: opacity 0.5s;
   }
-  #overlay h1 { font-size: 52px; margin-bottom: 16px; }
-  #overlay p  { font-size: 18px; margin: 6px 0; color: #ccc; }
+  #overlay::before {
+    content: '';
+    position: absolute; width: 600px; height: 600px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,180,255,0.07) 0%, transparent 70%);
+    animation: pulse-ring 3.5s ease-in-out infinite; pointer-events: none;
+  }
+  @keyframes pulse-ring {
+    0%, 100% { transform: scale(1);    opacity: 0.5; }
+    50%       { transform: scale(1.22); opacity: 1;   }
+  }
+
+  #overlay h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(36px, 6vw, 68px);
+    font-weight: 900; letter-spacing: 5px; text-align: center;
+    background: linear-gradient(135deg, #00d4ff 0%, #00ff88 55%, #ffcc00 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 28px rgba(0,212,255,0.55));
+    animation: float-title 4s ease-in-out infinite;
+    margin-bottom: 6px;
+  }
+  @keyframes float-title {
+    0%, 100% { transform: translateY(0);  }
+    50%       { transform: translateY(-7px); }
+  }
+
+  .tag {
+    font-size: 11px; color: #4af; letter-spacing: 10px;
+    text-transform: uppercase; margin-bottom: 26px;
+    font-family: 'Orbitron', sans-serif;
+  }
+
+  .inst-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 9px 28px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 14px; backdrop-filter: blur(12px);
+    padding: 16px 32px; margin-bottom: 18px;
+  }
+  .inst-row { display: flex; align-items: center; gap: 9px; color: #bbb; font-size: 13px; }
+  .kbd {
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 5px; padding: 2px 9px; font-weight: 700; color: #fff;
+    font-size: 11px; font-family: 'Orbitron', sans-serif; white-space: nowrap;
+  }
+
+  #overlay p {
+    font-size: 14px; margin: 0 0 22px; color: #777; text-align: center;
+  }
+  #overlay p b { color: #ffcc00; font-weight: 700; }
+
   #overlay button {
-    margin-top: 28px; padding: 14px 44px; font-size: 22px;
-    background: #00cc66; color: #000; border: none; border-radius: 10px;
-    cursor: pointer; font-weight: bold; letter-spacing: 1px;
+    margin-top: 0; padding: 14px 54px; font-size: 17px; font-weight: 800;
+    letter-spacing: 4px; text-transform: uppercase; cursor: pointer; border: none;
+    border-radius: 50px; position: relative; overflow: hidden;
+    background: linear-gradient(135deg, #00d4ff, #0055ff);
+    color: #fff; box-shadow: 0 0 35px rgba(0,180,255,0.45);
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-family: 'Orbitron', sans-serif;
   }
-  #overlay button:hover { background: #00ff88; }
+  #overlay button::before {
+    content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    animation: shimmer 2.2s infinite;
+  }
+  @keyframes shimmer { to { left: 100%; } }
+  #overlay button:hover { transform: scale(1.07); box-shadow: 0 0 60px rgba(0,180,255,0.8); }
+
+  /* ── DAMAGE FLASH ── */
+  #dmg-flash {
+    position: fixed; inset: 0; z-index: 9; pointer-events: none;
+    background: rgba(255, 0, 0, 0); transition: background 0.06s;
+  }
+  #dmg-flash.hit { background: rgba(255, 0, 0, 0.25); }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="dmg-flash"></div>
 <div id="overlay">
-  <h1 style="color:#00ff88;">🎮 Enemy Shooter</h1>
-  <p><b>WASD / Arrow Keys</b> — Move your character</p>
-  <p>Collect glowing <b style="color:#ffe066;">★ gems</b> to score points</p>
-  <p>Dodge the <b style="color:#ff4444;">red enemy's</b> projectiles!</p>
-  <p style="margin-top:12px;">Collect <b>10 gems</b> to WIN &nbsp;|&nbsp; You have <b>5 lives</b></p>
-  <button onclick="startGame()">▶ Start Game</button>
+  <h1>ENEMY SHOOTER</h1>
+  <div class="tag">2D Enhanced Edition</div>
+  <div class="inst-grid">
+    <div class="inst-row"><span class="kbd">WASD</span> Move</div>
+    <div class="inst-row"><span class="kbd">↑↓←→</span> Move</div>
+    <div class="inst-row">⭐ Collect <b style="color:#fff">&nbsp;gems</b></div>
+    <div class="inst-row">💀 Dodge <b style="color:#fff">&nbsp;fireballs</b></div>
+  </div>
+  <p>Collect <b>10 gems</b> to WIN &nbsp;·&nbsp; You have <b>5 lives</b></p>
+  <button onclick="startGame()">▶ START GAME</button>
 </div>
 
 <script>
@@ -204,6 +294,9 @@ function update() {
         player.invincible = 90;
         lives--;
         spawnParticles(player.x, player.y, '#ff4444', 14);
+        // Damage flash
+        const flash = document.getElementById('dmg-flash');
+        if (flash) { flash.classList.add('hit'); setTimeout(() => flash.classList.remove('hit'), 80); }
         if (lives <= 0) { endGame(false); return; }
       }
     }
@@ -589,14 +682,14 @@ function endGame(won) {
   cancelAnimationFrame(animId);
   const ol = document.getElementById('overlay');
   ol.innerHTML = won
-    ? `<h1 style="color:#00ff88">🏆 YOU WIN!</h1>
-       <p style="color:#ffe066;font-size:22px">Score: ${score} / ${SCORE_WIN}</p>
-       <p style="color:#aaa">You collected all gems and survived!</p>
-       <button onclick="startGame()">▶ Play Again</button>`
-    : `<h1 style="color:#ff4444">💀 GAME OVER</h1>
-       <p style="color:#ff8888;font-size:22px">Score: ${score} / ${SCORE_WIN}</p>
-       <p style="color:#aaa">The enemy defeated you!</p>
-       <button onclick="startGame()">▶ Try Again</button>`;
+    ? `<h1 style="background:linear-gradient(135deg,#00ff88,#00d4ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">🏆 YOU WIN!</h1>
+       <div class="tag" style="color:#ffcc00">SCORE: ${score} / ${SCORE_WIN}</div>
+       <p style="color:#777;margin-bottom:24px">You collected all gems and survived!</p>
+       <button onclick="startGame()">▶ PLAY AGAIN</button>`
+    : `<h1 style="background:linear-gradient(135deg,#ff4444,#ff8800);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">💀 GAME OVER</h1>
+       <div class="tag" style="color:#ff6655">SCORE: ${score} / ${SCORE_WIN}</div>
+       <p style="color:#777;margin-bottom:24px">The enemy defeated you. Try again!</p>
+       <button onclick="startGame()">▶ TRY AGAIN</button>`;
   ol.style.display = 'flex';
 }
 </script>
