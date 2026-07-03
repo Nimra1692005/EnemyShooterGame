@@ -586,7 +586,23 @@ function hitEnemy(data,grp,dmg){
   if(data.hp<=0){
     data.alive=false;
     if(data===boss){data.active=false;bossGroup.visible=false;bossHPDiv.style.display='none';}
-    else{grp.visible=false;enemy.alive=false;}
+    else{
+      grp.visible=false;enemy.alive=false;
+      // Respawn new enemy after 3 seconds at random position
+      setTimeout(()=>{
+        if(!gameRunning) return;
+        const angle=Math.random()*Math.PI*2;
+        const dist=18+Math.random()*10;
+        enemy.x=Math.cos(angle)*dist;
+        enemy.z=Math.sin(angle)*dist;
+        enemy.hp=3+kills; // gets harder each time
+        enemy.alive=true;
+        enemy.shootTimer=0;
+        enemyGroup.position.set(enemy.x,0,enemy.z);
+        enemyGroup.visible=true;
+        showMsg('⚠️ New Enemy Appeared!');
+      },3000);
+    }
     kills++;quests.kills++;player.xp+=data===boss?50:20;
     spawnParticles(grp.position.x,1.5,grp.position.z,0xff4400,20);
     // Drop random power-up
