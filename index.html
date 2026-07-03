@@ -336,7 +336,7 @@ document.body.appendChild(bossHPDiv);
 // ════════════════════════════════════════
 const player={
   x:0,z:0,angle:0,speed:0.1,
-  hp:100,maxHp:100,
+  hp:200,maxHp:200,
   invincible:0,alive:true,walkTime:0,
   xp:0,
   // power ups
@@ -349,7 +349,7 @@ const player={
   weapon:0,
   attackTimer:0,
 };
-const enemy={x:15,z:-15,angle:0,shootTimer:0,shootInterval:90,hp:3,alive:true};
+const enemy={x:15,z:-15,angle:0,shootTimer:0,shootInterval:150,hp:3,alive:true};
 const boss={x:0,z:-30,angle:0,shootTimer:0,hp:20,maxHp:20,alive:false,active:false,phase:1,specialTimer:0};
 let score=0,kills=0,gameRunning=false;
 const SCORE_WIN=10;
@@ -596,8 +596,10 @@ function _createGem(x,z,type){
 }
 
 for(let i=0;i<4;i++) spawnGem();
-// Spawn one gun pickup near player
-_createGem(5,5,GEM_GUN);
+// Spawn gun pickup RIGHT next to player at start
+_createGem(2,2,GEM_GUN);
+_createGem(-2,2,GEM_SPEED);
+_createGem(2,-2,GEM_SHIELD);
 
 // ════════════════════════════════════════
 // PARTICLES
@@ -617,8 +619,8 @@ function spawnParticles(x,y,z,color,count){
 // ════════════════════════════════════════
 function updateHUD(){
   document.getElementById('scoreText').textContent=`⭐ ${score} / ${SCORE_WIN}`;
-  let h='';for(let i=0;i<player.hp/20;i++)h+='❤️';
-  for(let i=Math.ceil(player.hp/20);i<5;i++)h+='🖤';
+  let h='';for(let i=0;i<player.hp/40;i++)h+='❤️';
+  for(let i=Math.ceil(player.hp/40);i<5;i++)h+='🖤';
   document.getElementById('livesText').textContent=h;
   document.getElementById('barFill').style.width=(score/SCORE_WIN*100)+'%';
   document.getElementById('hpBar').style.width=(player.hp/player.maxHp*100)+'%';
@@ -730,7 +732,7 @@ function updateBoss(t){
 function startGame(){
   score=0;kills=0;gameRunning=true;
   player.x=0;player.z=0;player.angle=0;player.invincible=0;player.alive=true;
-  player.hp=100;player.xp=0;player.speedTimer=0;player.shieldTimer=0;
+  player.hp=200;player.xp=0;player.speedTimer=0;player.shieldTimer=0;
   player.hasGun=false;player.weapon=0;player.rolling=false;player.attackTimer=0;
   enemy.x=15;enemy.z=-15;enemy.shootTimer=0;enemy.hp=3;enemy.alive=true;
   boss.active=false;boss.alive=false;boss.hp=20;boss.phase=1;boss.specialTimer=0;
@@ -744,7 +746,9 @@ function startGame(){
   enemyGroup.position.set(15,0,-15);
   bossHPDiv.style.display='none';
   for(let i=0;i<4;i++) spawnGem();
-  _createGem(5,5,GEM_GUN);
+  _createGem(2,2,GEM_GUN);
+  _createGem(-2,2,GEM_SPEED);
+  _createGem(2,-2,GEM_SHIELD);
   selectSlot(0);
   updateHUD();updateQuestUI();
   document.getElementById('overlay').style.display='none';
@@ -896,7 +900,7 @@ function update(t){
     c.time+=0.03;c.mesh.rotation.y+=0.02;
     c.mesh.position.y=1.2+Math.sin(c.time)*0.3;
     const gx=c.mesh.position.x-player.x,gz=c.mesh.position.z-player.z;
-    if(Math.sqrt(gx*gx+gz*gz)<1.5){
+    if(Math.sqrt(gx*gx+gz*gz)<2.5){
       spawnParticles(c.mesh.position.x,1.2,c.mesh.position.z,gemColorMap[c.type],10);
       scene.remove(c.mesh);gems.splice(i,1);
       if(c.type===GEM_NORMAL){
