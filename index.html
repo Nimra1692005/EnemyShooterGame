@@ -147,11 +147,13 @@ canvas{display:block;}
   <h1 style="color:#00ff88">🎮 Epic Shooter 3D</h1>
   <div class="controls-grid">
     <div><span>WASD / Arrows</span> — Move</div>
-    <div><span>1-5</span> — Select item</div>
-    <div><span>Click</span> — Attack / Use</div>
-    <div><span>B</span> — Build mode</div>
+    <div><span>F / Click</span> — Attack/Use</div>
+    <div><span>Q</span> — Quick Sword swing</div>
+    <div><span>G</span> — Quick Gun shoot</div>
+    <div><span>1-5</span> — Select weapon/item</div>
+    <div><span>Space</span> — Dodge roll</div>
+    <div><span>B / 5</span> — Build mode</div>
     <div><span>E</span> — Remove block</div>
-    <div><span>Space</span> — Roll/Dodge</div>
   </div>
   <p>Collect <b style="color:#ffe066">gems</b> • Kill enemies • Complete quests • Defeat the BOSS!</p>
   <button onclick="startGame()">▶ Start Game</button>
@@ -383,6 +385,12 @@ addEventListener('keydown',e=>{
   if(e.key==='5')selectSlot(4);
   if(e.key==='e'||e.key==='E') removeNearbyBlock();
   if(e.key===' '){ e.preventDefault(); doRoll(); }
+  // F key = attack/use current weapon
+  if(e.key==='f'||e.key==='F'){ e.preventDefault(); handleAttack(); }
+  // Q = quick sword swing
+  if(e.key==='q'||e.key==='Q'){ selectSlot(0); handleAttack(); }
+  // G = quick gun shoot
+  if(e.key==='g'||e.key==='G'){ selectSlot(1); handleAttack(); }
 });
 addEventListener('keyup',e=>keys[e.key]=false);
 
@@ -469,29 +477,54 @@ function handleAttack(){
 }
 
 function swordAttack(){
-  player.attackTimer=25;
-  // Hit enemies in front within 2.5 units
+  player.attackTimer=20;
+  let hit=false;
+  // Big range - 5 units, 360 degrees (no need to face enemy)
   const targets=[
-    {obj:enemy,grp:enemyGroup,data:enemy},
-    {obj:boss,grp:bossGroup,data:boss}
+    {obj:enemy,grp:enemyGroup},
+    {obj:boss,grp:bossGroup}
   ];
   targets.forEach(t=>{
-    if(!t.obj.alive&&!t.obj.active) return;
+    if(!t.obj.alive&&!(t.obj===boss&&boss.active)) return;
     const dx=t.grp.position.x-player.x, dz=t.grp.position.z-player.z;
     const dist=Math.sqrt(dx*dx+dz*dz);
-    if(dist<2.8){
+    if(dist<5.0){
       hitEnemy(t.obj,t.grp,1);
-      spawnParticles(t.grp.position.x,1.5,t.grp.position.z,0xff8800,8);
-      showMsg('⚔️ Hit!');
+      spawnParticles(t.grp.position.x,1.5,t.grp.position.z,0xff8800,10);
+      // Sword swing visual
+      showMsg('⚔️ SWORD HIT! -1 HP');
+      hit=true;
     }
   });
+  if(!hit) showMsg('⚔️ Sword swing! (enemy door hai)');
+  // Sword swing effect on player
+  playerGroup.userData.rArm.rotation.x=-1.5;
+  setTimeout(()=>{ if(playerGroup.userData.rArm) playerGroup.userData.rArm.rotation.x=0; },300);
 }
 
 function gunAttack(){
-  if(!player.hasGun){ showMsg('❌ Find a Gun power-up first!'); return; }
-  player.attackTimer=15;
-  const dx=Math.sin(player.angle), dz=Math.cos(player.angle);
-  spawnBullet(player.x+dx*1,player.z+dz*1,dx,dz,0x00ffff,true);
+  if(!player.hasGun){ showMsg('❌ Pehle Gun gem uthao! (cyan gem)'); return; }
+  player.attackTimer=12;
+  // Auto aim toward nearest enemy
+  let tx=player.x+Math.sin(player.angle)*20;
+  let tz=player.z+Math.cos(player.angle)*20;
+  // Find nearest target
+  const targets=[];
+  if(enemy.alive) targets.push({x:enemy.x,z:enemy.z});
+  if(boss.active&&boss.alive) targets.push({x:boss.x,z:boss.z});
+  if(targets.length>0){
+    let nearest=targets[0],minD=9999;
+    targets.forEach(t=>{
+      const d=Math.sqrt((t.x-player.x)**2+(t.z-player.z)**2);
+      if(d<minD){minD=d;nearest=t;}
+    });
+    // Auto aim if enemy within 20 units
+    if(minD<20){ tx=nearest.x; tz=nearest.z; }
+  }
+  const adx=tx-player.x, adz=tz-player.z;
+  const alen=Math.sqrt(adx*adx+adz*adz)||1;
+  spawnBullet(player.x+(adx/alen)*1.5, player.z+(adz/alen)*1.5, adx/alen, adz/alen, 0x00ffff, true);
+  showMsg('🔫 BANG!');
 }
 
 function spawnBullet(x,z,dx,dz,color,isPlayer){
