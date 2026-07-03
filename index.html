@@ -2,591 +2,460 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Enemy Shooter Game</title>
+<title>Enemy Shooter 3D</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif; overflow: hidden; }
-  canvas { display: block; image-rendering: pixelated; }
-  #overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    display: flex; flex-direction: column; justify-content: center; align-items: center;
-    background: rgba(0,0,0,0.88); color: white; z-index: 10;
-  }
-  #overlay h1 { font-size: 52px; margin-bottom: 16px; }
-  #overlay p  { font-size: 18px; margin: 6px 0; color: #ccc; }
-  #overlay button {
-    margin-top: 28px; padding: 14px 44px; font-size: 22px;
-    background: #00cc66; color: #000; border: none; border-radius: 10px;
-    cursor: pointer; font-weight: bold; letter-spacing: 1px;
-  }
-  #overlay button:hover { background: #00ff88; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; overflow:hidden; font-family:Arial,sans-serif; }
+canvas { display:block; }
+#hud {
+  position:fixed; top:0; left:0; width:100%; padding:12px 20px;
+  background:linear-gradient(to bottom,rgba(0,0,0,0.7),transparent);
+  color:#fff; display:flex; justify-content:space-between; align-items:center;
+  z-index:10; pointer-events:none;
+}
+#hud .score { font-size:24px; font-weight:bold; color:#ffe066; text-shadow:0 0 10px #ff9900; }
+#hud .lives { font-size:22px; }
+#hud .bar-wrap { text-align:right; }
+#hud .bar-bg { width:180px; height:16px; background:rgba(255,255,255,0.15); border-radius:8px; overflow:hidden; }
+#hud .bar-fill { height:100%; background:linear-gradient(to right,#00ff88,#00ccff); border-radius:8px; transition:width 0.3s; }
+#overlay {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.88); display:flex; flex-direction:column;
+  justify-content:center; align-items:center; z-index:20; color:#fff;
+}
+#overlay h1 { font-size:54px; margin-bottom:16px; }
+#overlay p  { font-size:19px; margin:7px 0; color:#ccc; }
+#overlay button {
+  margin-top:30px; padding:14px 50px; font-size:22px; font-weight:bold;
+  background:#00cc66; color:#000; border:none; border-radius:10px; cursor:pointer;
+}
+#overlay button:hover { background:#00ff88; }
+#controls {
+  position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
+  color:rgba(255,255,255,0.45); font-size:13px; z-index:10; pointer-events:none;
+}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<div id="hud">
+  <div class="score" id="scoreText">⭐ Score: 0 / 10</div>
+  <div class="lives" id="livesText">❤️❤️❤️❤️❤️</div>
+  <div class="bar-wrap">
+    <div style="color:#aaa;font-size:12px;margin-bottom:3px;">Progress</div>
+    <div class="bar-bg"><div class="bar-fill" id="barFill" style="width:0%"></div></div>
+  </div>
+</div>
 <div id="overlay">
-  <h1 style="color:#00ff88;">🎮 Enemy Shooter</h1>
-  <p><b>WASD / Arrow Keys</b> — Move your character</p>
-  <p>Collect glowing <b style="color:#ffe066;">★ gems</b> to score points</p>
-  <p>Dodge the <b style="color:#ff4444;">red enemy's</b> projectiles!</p>
-  <p style="margin-top:12px;">Collect <b>10 gems</b> to WIN &nbsp;|&nbsp; You have <b>5 lives</b></p>
+  <h1 style="color:#00ff88">🎮 Enemy Shooter 3D</h1>
+  <p><b>WASD / Arrow Keys</b> — Move</p>
+  <p>Collect glowing <b style="color:#ffe066">★ gems</b> to score</p>
+  <p>Dodge <b style="color:#ff4444">enemy fireballs!</b></p>
+  <p style="margin-top:10px">Collect <b>10 gems</b> to WIN &nbsp;|&nbsp; <b>5 lives</b></p>
   <button onclick="startGame()">▶ Start Game</button>
 </div>
+<div id="controls">WASD / Arrow Keys — Move &nbsp;|&nbsp; Camera follows player (Third Person)</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════
+//  THREE.JS SETUP
+// ═══════════════════════════════════════════
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb); // sky blue
+scene.fog        = new THREE.Fog(0x87ceeb, 30, 120);
+
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth/window.innerHeight, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ═══════════════════════════════════════════
+//  LIGHTING
+// ═══════════════════════════════════════════
+const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(0xfff5cc, 1.2);
+sun.position.set(20, 40, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.width  = 2048;
+sun.shadow.mapSize.height = 2048;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far  = 200;
+sun.shadow.camera.left = -60;
+sun.shadow.camera.right = 60;
+sun.shadow.camera.top   = 60;
+sun.shadow.camera.bottom = -60;
+scene.add(sun);
+
+const hemi = new THREE.HemisphereLight(0x87ceeb, 0x4a7c3f, 0.4);
+scene.add(hemi);
+</script>
 
 <script>
-// ════════════════════════════════════════════════
-//  SETUP
-// ════════════════════════════════════════════════
-const canvas = document.getElementById('c');
-const ctx    = canvas.getContext('2d');
-const W = canvas.width  = 800;
-const H = canvas.height = 600;
-
-const TILE   = 48;           // tile size in pixels
-const MAP_W  = 30;           // tiles wide
-const MAP_H  = 24;           // tiles tall
-const WORLD_W = MAP_W * TILE;
-const WORLD_H = MAP_H * TILE;
-
-// ── Tile types ──
-const GRASS = 0, DIRT = 1, STONE = 2, WATER = 3;
-const TILE_COLORS = ['#4a7c3f','#8b6914','#888','#1a6699'];
-const TILE_DARK   = ['#3a6030','#7a5a10','#666','#155588'];
-
-// ── Generate simple tile map ──
-const map = [];
-for (let r = 0; r < MAP_H; r++) {
-  map[r] = [];
-  for (let c = 0; c < MAP_W; c++) {
-    const n = Math.random();
-    if (n < 0.65)      map[r][c] = GRASS;
-    else if (n < 0.78) map[r][c] = DIRT;
-    else if (n < 0.88) map[r][c] = STONE;
-    else               map[r][c] = WATER;
+// ═══════════════════════════════════════════
+//  GROUND + WORLD
+// ═══════════════════════════════════════════
+function makeGround() {
+  // Checkerboard ground
+  const size = 80;
+  const geo  = new THREE.PlaneGeometry(size, size, 20, 20);
+  const canvas2 = document.createElement('canvas');
+  canvas2.width = canvas2.height = 512;
+  const c2 = canvas2.getContext('2d');
+  for (let i = 0; i < 16; i++) {
+    for (let j = 0; j < 16; j++) {
+      c2.fillStyle = (i+j)%2===0 ? '#4a7c3f' : '#3a6030';
+      c2.fillRect(i*32, j*32, 32, 32);
+    }
   }
+  const tex = new THREE.CanvasTexture(canvas2);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4);
+  const mat  = new THREE.MeshLambertMaterial({ map: tex });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI/2;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
 }
+makeGround();
 
-// ── Camera ──
-const cam = { x: 0, y: 0 };
+// Trees decoration
+function makeTree(x, z) {
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.3, 0.4, 2, 6),
+    new THREE.MeshLambertMaterial({ color: 0x8b5e3c })
+  );
+  trunk.position.set(x, 1, z);
+  trunk.castShadow = true;
+  scene.add(trunk);
+  const leaves = new THREE.Mesh(
+    new THREE.ConeGeometry(2, 3.5, 7),
+    new THREE.MeshLambertMaterial({ color: 0x228b22 })
+  );
+  leaves.position.set(x, 3.5, z);
+  leaves.castShadow = true;
+  scene.add(leaves);
+}
+const treePos = [[-18,-18],[-20,5],[-15,18],[10,-22],[22,-10],[20,20],[18,8],[-8,22],[-22,12],[12,15]];
+treePos.forEach(p => makeTree(p[0], p[1]));
 
-// ════════════════════════════════════════════════
-//  ENTITIES
-// ════════════════════════════════════════════════
-const player = {
-  x: WORLD_W/2, y: WORLD_H/2,
-  w: 28, h: 28,
-  speed: 3, angle: 0,
-  invincible: 0, alive: true,
-  // animation
-  walkFrame: 0, walkTimer: 0, moving: false
-};
+// Rocks
+function makeRock(x, z) {
+  const rock = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(0.8 + Math.random()*0.5, 0),
+    new THREE.MeshLambertMaterial({ color: 0x888888 })
+  );
+  rock.position.set(x, 0.5, z);
+  rock.rotation.y = Math.random()*Math.PI;
+  rock.castShadow = true;
+  scene.add(rock);
+}
+[[-5,12],[8,-8],[-12,3],[15,-16],[3,18]].forEach(p => makeRock(p[0], p[1]));
+</script>
 
-const enemy = {
-  x: WORLD_W * 0.8, y: WORLD_H * 0.2,
-  w: 30, h: 30,
-  angle: 0,
-  shootTimer: 0, shootInterval: 110,
-  alive: true
-};
+<script>
+// ═══════════════════════════════════════════
+//  PLAYER (3rd person character)
+// ═══════════════════════════════════════════
+const playerGroup = new THREE.Group();
+scene.add(playerGroup);
 
-let projectiles = [];
+// Body
+const bodyMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(0.8, 1.0, 0.5),
+  new THREE.MeshLambertMaterial({ color: 0x2266cc })
+);
+bodyMesh.position.y = 1.3;
+bodyMesh.castShadow = true;
+playerGroup.add(bodyMesh);
+
+// Head
+const headMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(0.65, 0.65, 0.65),
+  new THREE.MeshLambertMaterial({ color: 0xf5c58a })
+);
+headMesh.position.y = 2.15;
+headMesh.castShadow = true;
+playerGroup.add(headMesh);
+
+// Hair
+const hairMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(0.68, 0.25, 0.68),
+  new THREE.MeshLambertMaterial({ color: 0x5c3210 })
+);
+hairMesh.position.y = 2.55;
+playerGroup.add(hairMesh);
+
+// Left arm
+const lArm = new THREE.Mesh(
+  new THREE.BoxGeometry(0.25, 0.8, 0.25),
+  new THREE.MeshLambertMaterial({ color: 0x2266cc })
+);
+lArm.position.set(-0.55, 1.25, 0);
+lArm.castShadow = true;
+playerGroup.add(lArm);
+
+// Right arm
+const rArm = new THREE.Mesh(
+  new THREE.BoxGeometry(0.25, 0.8, 0.25),
+  new THREE.MeshLambertMaterial({ color: 0x2266cc })
+);
+rArm.position.set(0.55, 1.25, 0);
+rArm.castShadow = true;
+playerGroup.add(rArm);
+
+// Left leg
+const lLeg = new THREE.Mesh(
+  new THREE.BoxGeometry(0.3, 0.9, 0.3),
+  new THREE.MeshLambertMaterial({ color: 0x1a3a7a })
+);
+lLeg.position.set(-0.22, 0.45, 0);
+lLeg.castShadow = true;
+playerGroup.add(lLeg);
+
+// Right leg
+const rLeg = new THREE.Mesh(
+  new THREE.BoxGeometry(0.3, 0.9, 0.3),
+  new THREE.MeshLambertMaterial({ color: 0x1a3a7a })
+);
+rLeg.position.set(0.22, 0.45, 0);
+rLeg.castShadow = true;
+playerGroup.add(rLeg);
+
+// Player glow ring
+const glowRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.6, 0.85, 16),
+  new THREE.MeshBasicMaterial({ color: 0x00ccff, side: THREE.DoubleSide, transparent:true, opacity:0.5 })
+);
+glowRing.rotation.x = -Math.PI/2;
+glowRing.position.y = 0.05;
+playerGroup.add(glowRing);
+
+const player = { x:0, z:0, angle:0, speed:0.1, invincible:0, alive:true, walkTime:0 };
+playerGroup.position.set(0, 0, 0);
+</script>
+
+<script>
+// ═══════════════════════════════════════════
+//  ENEMY (3D demon character)
+// ═══════════════════════════════════════════
+const enemyGroup = new THREE.Group();
+scene.add(enemyGroup);
+
+// Body
+const eBody = new THREE.Mesh(
+  new THREE.BoxGeometry(1.0, 1.1, 0.6),
+  new THREE.MeshLambertMaterial({ color: 0xcc2222 })
+);
+eBody.position.y = 1.35;
+eBody.castShadow = true;
+enemyGroup.add(eBody);
+
+// Head
+const eHead = new THREE.Mesh(
+  new THREE.BoxGeometry(0.75, 0.75, 0.75),
+  new THREE.MeshLambertMaterial({ color: 0xcc2222 })
+);
+eHead.position.y = 2.2;
+eHead.castShadow = true;
+enemyGroup.add(eHead);
+
+// Horns
+[[-0.22, 2.72, 0.1],[0.22, 2.72, 0.1]].forEach((p,i) => {
+  const horn = new THREE.Mesh(
+    new THREE.ConeGeometry(0.1, 0.5, 5),
+    new THREE.MeshLambertMaterial({ color: 0xff6600 })
+  );
+  horn.position.set(p[0], p[1], p[2]);
+  horn.rotation.z = i===0 ? -0.3 : 0.3;
+  enemyGroup.add(horn);
+});
+
+// Eyes (glowing yellow)
+[-0.2, 0.2].forEach(ex => {
+  const eye = new THREE.Mesh(
+    new THREE.SphereGeometry(0.1, 6, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffff00 })
+  );
+  eye.position.set(ex, 2.22, 0.38);
+  enemyGroup.add(eye);
+});
+
+// Arms
+[-0.7, 0.7].forEach((ex,i) => {
+  const arm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.28, 0.9, 0.28),
+    new THREE.MeshLambertMaterial({ color: 0xaa1111 })
+  );
+  arm.position.set(ex, 1.3, 0);
+  arm.castShadow = true;
+  enemyGroup.add(arm);
+});
+
+// Legs
+[-0.25, 0.25].forEach(lx => {
+  const leg = new THREE.Mesh(
+    new THREE.BoxGeometry(0.32, 1.0, 0.32),
+    new THREE.MeshLambertMaterial({ color: 0x880000 })
+  );
+  leg.position.set(lx, 0.5, 0);
+  leg.castShadow = true;
+  enemyGroup.add(leg);
+});
+
+// Enemy glow ring
+const eRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.7, 1.0, 16),
+  new THREE.MeshBasicMaterial({ color: 0xff2200, side: THREE.DoubleSide, transparent:true, opacity:0.5 })
+);
+eRing.rotation.x = -Math.PI/2;
+eRing.position.y = 0.05;
+enemyGroup.add(eRing);
+
+const enemy = { x:15, z:-15, angle:0, shootTimer:0, shootInterval:110 };
+enemyGroup.position.set(15, 0, -15);
+</script>
+
+<script>
+// ═══════════════════════════════════════════
+//  COLLECTIBLES (3D spinning gems)
+// ═══════════════════════════════════════════
+const gemColors = [0xffe066, 0x00ffcc, 0xff66ff, 0x66ffff, 0xff9966];
 let collectibles = [];
-let particles    = [];
-let spawnTimer   = 0;
-let score        = 0;
-let lives        = 5;
-const SCORE_WIN  = 10;
-let gameRunning  = false;
-let animId;
+let collectibleMeshes = [];
 
-// ════════════════════════════════════════════════
-//  INPUT
-// ════════════════════════════════════════════════
-const keys = {};
-addEventListener('keydown', e => { keys[e.key] = true;  e.preventDefault(); });
-addEventListener('keyup',   e => { keys[e.key] = false; });
-
-// ════════════════════════════════════════════════
-//  START
-// ════════════════════════════════════════════════
-function startGame() {
-  score = 0; lives = 5;
-  projectiles = []; collectibles = []; particles = [];
-  player.x = WORLD_W/2; player.y = WORLD_H/2;
-  player.invincible = 0; player.alive = true; player.angle = 0;
-  enemy.x = WORLD_W * 0.8; enemy.y = WORLD_H * 0.2; enemy.alive = true;
-  spawnTimer = 0;
-  document.getElementById('overlay').style.display = 'none';
-  gameRunning = true;
-  for (let i = 0; i < 4; i++) spawnCollectible();
-  cancelAnimationFrame(animId);
-  loop();
-}
-
-// ════════════════════════════════════════════════
-//  MAIN LOOP
-// ════════════════════════════════════════════════
-function loop() {
-  if (!gameRunning) return;
-  update();
-  render();
-  animId = requestAnimationFrame(loop);
-}
-
-// ════════════════════════════════════════════════
-//  UPDATE
-// ════════════════════════════════════════════════
-function update() {
-  // ── Player movement ──
-  let dx = 0, dy = 0;
-  if (keys['a'] || keys['ArrowLeft'])  dx -= 1;
-  if (keys['d'] || keys['ArrowRight']) dx += 1;
-  if (keys['w'] || keys['ArrowUp'])    dy -= 1;
-  if (keys['s'] || keys['ArrowDown'])  dy += 1;
-
-  player.moving = dx !== 0 || dy !== 0;
-
-  if (player.moving) {
-    // normalize diagonal
-    const len = Math.sqrt(dx*dx + dy*dy);
-    dx /= len; dy /= len;
-    player.x += dx * player.speed;
-    player.y += dy * player.speed;
-    player.angle = Math.atan2(dy, dx);
-    // walk animation
-    player.walkTimer++;
-    if (player.walkTimer > 8) { player.walkTimer = 0; player.walkFrame = (player.walkFrame+1)%4; }
-  }
-
-  // Clamp to world
-  player.x = Math.max(16, Math.min(WORLD_W - 16, player.x));
-  player.y = Math.max(16, Math.min(WORLD_H - 16, player.y));
-
-  // Invincibility
-  if (player.invincible > 0) player.invincible--;
-
-  // ── Camera follow player (centered) ──
-  cam.x = player.x - W/2;
-  cam.y = player.y - H/2;
-  cam.x = Math.max(0, Math.min(WORLD_W - W, cam.x));
-  cam.y = Math.max(0, Math.min(WORLD_H - H, cam.y));
-
-  // ── Enemy faces player ──
-  const edx = player.x - enemy.x;
-  const edy = player.y - enemy.y;
-  enemy.angle = Math.atan2(edy, edx);
-
-  // ── Enemy shoots ──
-  enemy.shootTimer++;
-  if (enemy.shootTimer >= enemy.shootInterval) {
-    enemy.shootTimer = 0;
-    const dist = Math.sqrt(edx*edx + edy*edy);
-    if (dist > 0) {
-      projectiles.push({
-        x: enemy.x + Math.cos(enemy.angle)*20,
-        y: enemy.y + Math.sin(enemy.angle)*20,
-        vx: (edx/dist)*4.5, vy: (edy/dist)*4.5,
-        r: 7, life: 260
-      });
-    }
-  }
-
-  // ── Move projectiles ──
-  for (let i = projectiles.length-1; i >= 0; i--) {
-    const p = projectiles[i];
-    p.x += p.vx; p.y += p.vy; p.life--;
-    if (p.life <= 0 || p.x<0 || p.x>WORLD_W || p.y<0 || p.y>WORLD_H) {
-      projectiles.splice(i,1); continue;
-    }
-    if (player.invincible === 0) {
-      if (Math.abs(p.x-player.x)<18 && Math.abs(p.y-player.y)<18) {
-        projectiles.splice(i,1);
-        player.invincible = 90;
-        lives--;
-        spawnParticles(player.x, player.y, '#ff4444', 14);
-        if (lives <= 0) { endGame(false); return; }
-      }
-    }
-  }
-
-  // ── Spawn collectibles ──
-  spawnTimer++;
-  if (spawnTimer >= 180) { spawnTimer = 0; spawnCollectible(); }
-
-  // ── Collect gems ──
-  for (let i = collectibles.length-1; i >= 0; i--) {
-    const c = collectibles[i];
-    c.pulse += 0.08;
-    if (Math.abs(c.x-player.x)<22 && Math.abs(c.y-player.y)<22) {
-      collectibles.splice(i,1);
-      score++;
-      spawnParticles(c.x, c.y, '#ffe066', 16);
-      if (score >= SCORE_WIN) { endGame(true); return; }
-    }
-  }
-
-  // ── Particles ──
-  for (let i = particles.length-1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx; p.y += p.vy;
-    p.vx *= 0.93; p.vy *= 0.93;
-    p.life--;
-    if (p.life<=0) particles.splice(i,1);
-  }
-}
-
-// ════════════════════════════════════════════════
-//  RENDER
-// ════════════════════════════════════════════════
-function render() {
-  ctx.clearRect(0,0,W,H);
-  ctx.save();
-  ctx.translate(-cam.x, -cam.y);
-
-  // ── Draw tiles ──
-  const startCol = Math.max(0, Math.floor(cam.x/TILE));
-  const endCol   = Math.min(MAP_W, Math.ceil((cam.x+W)/TILE));
-  const startRow = Math.max(0, Math.floor(cam.y/TILE));
-  const endRow   = Math.min(MAP_H, Math.ceil((cam.y+H)/TILE));
-
-  for (let r = startRow; r < endRow; r++) {
-    for (let c = startCol; c < endCol; c++) {
-      const t = map[r][c];
-      const tx = c*TILE, ty = r*TILE;
-      ctx.fillStyle = TILE_COLORS[t];
-      ctx.fillRect(tx, ty, TILE, TILE);
-      // tile border
-      ctx.fillStyle = TILE_DARK[t];
-      ctx.fillRect(tx, ty, TILE, 1);
-      ctx.fillRect(tx, ty, 1, TILE);
-      // water waves
-      if (t === WATER) {
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(tx+6, ty+14, 18, 3);
-        ctx.fillRect(tx+22, ty+28, 14, 3);
-      }
-      // stone detail
-      if (t === STONE) {
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.fillRect(tx+8, ty+8, 14, 14);
-      }
-    }
-  }
-
-  // ── Particles ──
-  particles.forEach(p => {
-    ctx.globalAlpha = p.life / p.maxLife;
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    ctx.fill();
-  });
-  ctx.globalAlpha = 1;
-
-  // ── Collectibles ──
-  collectibles.forEach(c => {
-    const bob = Math.sin(c.pulse) * 3;
-    const grd = ctx.createRadialGradient(c.x, c.y+bob, 2, c.x, c.y+bob, 14);
-    grd.addColorStop(0, '#ffffff');
-    grd.addColorStop(0.4, '#ffe066');
-    grd.addColorStop(1, '#ff9900');
-    // glow
-    ctx.shadowColor = '#ffe066';
-    ctx.shadowBlur  = 18;
-    ctx.fillStyle   = grd;
-    ctx.beginPath();
-    // star shape
-    for (let i=0; i<5; i++) {
-      const a  = (i*4*Math.PI/5) - Math.PI/2 + c.pulse*0.3;
-      const a2 = ((i*4+2)*Math.PI/5) - Math.PI/2 + c.pulse*0.3;
-      if (i===0) ctx.moveTo(c.x + Math.cos(a)*13, c.y+bob + Math.sin(a)*13);
-      else        ctx.lineTo(c.x + Math.cos(a)*13, c.y+bob + Math.sin(a)*13);
-      ctx.lineTo(c.x + Math.cos(a2)*6, c.y+bob + Math.sin(a2)*6);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-
-  // ── Projectiles ──
-  projectiles.forEach(p => {
-    ctx.shadowColor = '#ff2200';
-    ctx.shadowBlur  = 14;
-    // trail
-    ctx.fillStyle = 'rgba(255,100,0,0.3)';
-    ctx.beginPath();
-    ctx.arc(p.x - p.vx*3, p.y - p.vy*3, p.r*0.7, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#ff4400';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#ffcc00';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r*0.45, 0, Math.PI*2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-
-  // ── Draw Enemy ──
-  drawCharacter(enemy.x, enemy.y, enemy.angle, false, 0, false);
-
-  // ── Draw Player ──
-  const flicker = player.invincible > 0 && Math.floor(player.invincible/7)%2===0;
-  if (!flicker) {
-    drawCharacter(player.x, player.y, player.angle, true, player.walkFrame, player.moving);
-  }
-
-  ctx.restore();
-
-  // ── HUD (screen space, not world space) ──
-  drawHUD();
-}
-
-// ════════════════════════════════════════════════
-//  DRAW CHARACTER (top-down RPG style)
-// ════════════════════════════════════════════════
-function drawCharacter(x, y, angle, isPlayer, walkFrame, moving) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(angle + Math.PI/2);
-
-  const shadow_color = isPlayer ? '#00aaff' : '#ff2200';
-
-  // Shadow on ground
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, 8, 13, 6, 0, 0, Math.PI*2);
-  ctx.fill();
-
-  if (isPlayer) {
-    // ── PLAYER CHARACTER ──
-
-    // Legs (walking animation)
-    const legSwing = moving ? Math.sin(walkFrame * Math.PI/2) * 6 : 0;
-    // Left leg
-    ctx.fillStyle = '#1a4fa8';
-    ctx.beginPath();
-    ctx.ellipse(-5, 6 + legSwing, 4, 6, 0, 0, Math.PI*2);
-    ctx.fill();
-    // Right leg
-    ctx.fillStyle = '#1a4fa8';
-    ctx.beginPath();
-    ctx.ellipse(5, 6 - legSwing, 4, 6, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    // Body
-    ctx.fillStyle = '#2266cc';
-    ctx.shadowColor = '#00aaff';
-    ctx.shadowBlur  = 12;
-    ctx.beginPath();
-    ctx.roundRect(-9, -8, 18, 16, 4);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Arms
-    const armSwing = moving ? Math.sin(walkFrame * Math.PI/2) * 5 : 0;
-    ctx.fillStyle = '#2266cc';
-    ctx.beginPath();
-    ctx.ellipse(-12, -2 + armSwing, 4, 5, -0.3, 0, Math.PI*2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(12, -2 - armSwing, 4, 5, 0.3, 0, Math.PI*2);
-    ctx.fill();
-
-    // Head
-    ctx.fillStyle = '#f5c58a';
-    ctx.shadowColor = '#00aaff';
-    ctx.shadowBlur  = 8;
-    ctx.beginPath();
-    ctx.arc(0, -14, 10, 0, Math.PI*2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Hair
-    ctx.fillStyle = '#5c3210';
-    ctx.beginPath();
-    ctx.arc(0, -20, 9, Math.PI, 0);
-    ctx.fill();
-
-    // Eyes
-    ctx.fillStyle = '#222';
-    ctx.beginPath(); ctx.arc(-4, -14, 2, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 4, -14, 2, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(-3.5, -14.5, 0.8, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 4.5, -14.5, 0.8, 0, Math.PI*2); ctx.fill();
-
-    // Name tag
-    ctx.rotate(-(angle + Math.PI/2));
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(-22, -32, 44, 14);
-    ctx.fillStyle = '#00ffcc';
-    ctx.font = 'bold 10px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('PLAYER', 0, -21);
-
-  } else {
-    // ── ENEMY CHARACTER ──
-
-    // Legs
-    const legSwing = Math.sin(Date.now()*0.008) * 5;
-    ctx.fillStyle = '#8b0000';
-    ctx.beginPath();
-    ctx.ellipse(-5, 7 + legSwing, 4, 6, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#8b0000';
-    ctx.beginPath();
-    ctx.ellipse(5, 7 - legSwing, 4, 6, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    // Body
-    ctx.fillStyle = '#cc2222';
-    ctx.shadowColor = '#ff0000';
-    ctx.shadowBlur  = 14;
-    ctx.beginPath();
-    ctx.roundRect(-10, -9, 20, 17, 4);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Spikes on body
-    ctx.fillStyle = '#ff6600';
-    for (let s = -1; s <= 1; s += 2) {
-      ctx.beginPath();
-      ctx.moveTo(s*10, -4);
-      ctx.lineTo(s*16, -8);
-      ctx.lineTo(s*10, 2);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Arms
-    ctx.fillStyle = '#cc2222';
-    ctx.beginPath();
-    ctx.ellipse(-13, -3, 4, 6, -0.3, 0, Math.PI*2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(13, -3, 4, 6, 0.3, 0, Math.PI*2);
-    ctx.fill();
-
-    // Head
-    ctx.fillStyle = '#cc2222';
-    ctx.shadowColor = '#ff0000';
-    ctx.shadowBlur  = 10;
-    ctx.beginPath();
-    ctx.arc(0, -15, 11, 0, Math.PI*2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Horns
-    ctx.fillStyle = '#ff6600';
-    ctx.beginPath();
-    ctx.moveTo(-7, -22); ctx.lineTo(-4, -30); ctx.lineTo(-1, -22);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(1, -22); ctx.lineTo(4, -30); ctx.lineTo(7, -22);
-    ctx.closePath(); ctx.fill();
-
-    // Eyes (glowing)
-    ctx.fillStyle = '#ff0';
-    ctx.shadowColor = '#ffff00';
-    ctx.shadowBlur = 8;
-    ctx.beginPath(); ctx.arc(-4, -15, 3, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 4, -15, 3, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.shadowBlur = 0;
-    ctx.beginPath(); ctx.arc(-4, -15, 1.5, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 4, -15, 1.5, 0, Math.PI*2); ctx.fill();
-
-    // Label
-    ctx.rotate(-(angle + Math.PI/2));
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(-22, -34, 44, 14);
-    ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 10px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('ENEMY', 0, -23);
-  }
-
-  ctx.restore();
-}
-
-// ════════════════════════════════════════════════
-//  HUD
-// ════════════════════════════════════════════════
-function drawHUD() {
-  // Background bar
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(0, 0, W, 56);
-
-  // Score
-  ctx.fillStyle = '#ffe066';
-  ctx.font = 'bold 22px Arial';
-  ctx.textAlign = 'left';
-  ctx.fillText(`⭐ Score: ${score} / ${SCORE_WIN}`, 16, 36);
-
-  // Lives hearts
-  ctx.font = '22px Arial';
-  ctx.textAlign = 'left';
-  let hearts = '';
-  for (let i = 0; i < lives; i++) hearts += '❤️';
-  for (let i = lives; i < 5; i++) hearts += '🖤';
-  ctx.fillText(hearts, 260, 36);
-
-  // Progress bar
-  const bx = W-220, by = 14, bw = 200, bh = 20;
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
-  ctx.fillRect(bx, by, bw, bh);
-  const prog = score / SCORE_WIN;
-  const grd = ctx.createLinearGradient(bx,0,bx+bw,0);
-  grd.addColorStop(0,'#00ff88'); grd.addColorStop(1,'#00ccff');
-  ctx.fillStyle = grd;
-  ctx.fillRect(bx, by, bw*prog, bh);
-  ctx.strokeStyle = '#ffffff44';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(bx, by, bw, bh);
-  ctx.fillStyle = '#fff';
-  ctx.font = '12px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(`${Math.round(prog*100)}%`, bx+bw/2, by+14);
-
-  // Controls hint
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.font = '12px Arial';
-  ctx.textAlign = 'left';
-  ctx.fillText('Move: WASD / Arrow Keys', 16, H-10);
-}
-
-// ════════════════════════════════════════════════
-//  HELPERS
-// ════════════════════════════════════════════════
-function spawnCollectible() {
+function spawnGem() {
   if (collectibles.length >= 6) return;
-  const margin = 80;
-  let x, y, tries = 0;
-  do {
-    x = margin + Math.random()*(WORLD_W-margin*2);
-    y = margin + Math.random()*(WORLD_H-margin*2);
-    tries++;
-  } while (tries < 20 && Math.abs(x-player.x)<100 && Math.abs(y-player.y)<100);
-  collectibles.push({ x, y, pulse: Math.random()*Math.PI*2 });
+  const x = (Math.random()-0.5)*50;
+  const z = (Math.random()-0.5)*50;
+  const color = gemColors[Math.floor(Math.random()*gemColors.length)];
+  const gem = new THREE.Group();
+  // Diamond shape using octahedron
+  const mesh = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.6, 0),
+    new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity:0.4, shininess:100 })
+  );
+  mesh.castShadow = true;
+  gem.add(mesh);
+  // Glow ring around gem
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.7, 0.9, 12),
+    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent:true, opacity:0.4 })
+  );
+  ring.rotation.x = -Math.PI/2;
+  gem.add(ring);
+  gem.position.set(x, 1.2, z);
+  scene.add(gem);
+  collectibles.push({ x, z, mesh: gem, time: Math.random()*Math.PI*2 });
 }
 
-function spawnParticles(x, y, color, count) {
-  for (let i = 0; i < count; i++) {
-    const a = Math.random()*Math.PI*2;
-    const s = 1.5 + Math.random()*3;
-    particles.push({
-      x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s,
-      r: 2+Math.random()*3, color,
-      life: 35+Math.random()*20, maxLife: 55
-    });
+// Spawn 4 gems at start
+for (let i = 0; i < 4; i++) spawnGem();
+
+// ═══════════════════════════════════════════
+//  PROJECTILES
+// ═══════════════════════════════════════════
+let projectiles = [];
+
+function spawnProjectile() {
+  const dx = player.x - enemy.x;
+  const dz = player.z - enemy.z;
+  const dist = Math.sqrt(dx*dx + dz*dz);
+  if (dist === 0) return;
+  const speed = 0.18;
+  const proj = new THREE.Group();
+  // Fireball core
+  const ball = new THREE.Mesh(
+    new THREE.SphereGeometry(0.3, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff4400 })
+  );
+  proj.add(ball);
+  // Glow
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.5, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff8800, transparent:true, opacity:0.35 })
+  );
+  proj.add(glow);
+  proj.position.set(enemy.x + (dx/dist)*1.5, 1.5, enemy.z + (dz/dist)*1.5);
+  scene.add(proj);
+  projectiles.push({ mesh: proj, vx: (dx/dist)*speed, vz: (dz/dist)*speed, life: 300 });
+}
+
+// ═══════════════════════════════════════════
+//  PARTICLES
+// ═══════════════════════════════════════════
+let particles = [];
+function spawnParticles(x, y, z, color) {
+  for (let i = 0; i < 12; i++) {
+    const p = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 4, 4),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    const angle = Math.random()*Math.PI*2;
+    const speed = 0.05 + Math.random()*0.1;
+    p.position.set(x, y, z);
+    scene.add(p);
+    particles.push({ mesh:p, vx:Math.cos(angle)*speed, vy:0.05+Math.random()*0.08, vz:Math.sin(angle)*speed, life:40 });
   }
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════════
+const keys = {};
+addEventListener('keydown', e => { keys[e.key]=true;  e.preventDefault(); });
+addEventListener('keyup',   e => { keys[e.key]=false; });
+
+// ═══════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════
+let score = 0, lives = 5, gameRunning = false;
+const SCORE_WIN = 10;
+let spawnTimer  = 0;
+
+function updateHUD() {
+  document.getElementById('scoreText').textContent = `⭐ Score: ${score} / ${SCORE_WIN}`;
+  let h = '';
+  for (let i=0;i<lives;i++) h+='❤️';
+  for (let i=lives;i<5;i++) h+='🖤';
+  document.getElementById('livesText').textContent = h;
+  document.getElementById('barFill').style.width = (score/SCORE_WIN*100)+'%';
+}
+
+function startGame() {
+  score=0; lives=5; gameRunning=true;
+  player.x=0; player.z=0; player.invincible=0; player.alive=true;
+  enemy.x=15; enemy.z=-15; enemy.shootTimer=0;
+  enemyGroup.position.set(15,0,-15);
+  playerGroup.position.set(0,0,0);
+  // Clear projectiles
+  projectiles.forEach(p => scene.remove(p.mesh));
+  projectiles=[];
+  // Clear old gems
+  collectibles.forEach(c => scene.remove(c.mesh));
+  collectibles=[];
+  particles.forEach(p => scene.remove(p.mesh));
+  particles=[];
+  for (let i=0;i<4;i++) spawnGem();
+  spawnTimer=0;
+  updateHUD();
+  document.getElementById('overlay').style.display='none';
+  animate();
 }
 
 function endGame(won) {
-  gameRunning = false;
-  cancelAnimationFrame(animId);
+  gameRunning=false;
   const ol = document.getElementById('overlay');
   ol.innerHTML = won
     ? `<h1 style="color:#00ff88">🏆 YOU WIN!</h1>
@@ -597,8 +466,135 @@ function endGame(won) {
        <p style="color:#ff8888;font-size:22px">Score: ${score} / ${SCORE_WIN}</p>
        <p style="color:#aaa">The enemy defeated you!</p>
        <button onclick="startGame()">▶ Try Again</button>`;
-  ol.style.display = 'flex';
+  ol.style.display='flex';
 }
+</script>
+
+<script>
+// ═══════════════════════════════════════════
+//  GAME LOOP
+// ═══════════════════════════════════════════
+let animId2;
+function animate() {
+  if (!gameRunning) return;
+  animId2 = requestAnimationFrame(animate);
+  const t = Date.now()*0.001;
+
+  // ── Player movement ──
+  let dx=0, dz=0;
+  if (keys['a']||keys['ArrowLeft'])  dx -= 1;
+  if (keys['d']||keys['ArrowRight']) dx += 1;
+  if (keys['w']||keys['ArrowUp'])    dz -= 1;
+  if (keys['s']||keys['ArrowDown'])  dz += 1;
+  const moving = dx!==0||dz!==0;
+  if (moving) {
+    const len = Math.sqrt(dx*dx+dz*dz);
+    player.x += (dx/len)*player.speed;
+    player.z += (dz/len)*player.speed;
+    player.angle = Math.atan2(dx, dz);
+    player.walkTime += 0.15;
+  }
+  // Clamp
+  player.x = Math.max(-38, Math.min(38, player.x));
+  player.z = Math.max(-38, Math.min(38, player.z));
+  if (player.invincible>0) player.invincible--;
+
+  // Player mesh update
+  playerGroup.position.set(player.x, 0, player.z);
+  playerGroup.rotation.y = player.angle;
+  // Walk animation
+  if (moving) {
+    lLeg.position.y = 0.45 + Math.sin(player.walkTime)*0.2;
+    rLeg.position.y = 0.45 - Math.sin(player.walkTime)*0.2;
+    lArm.rotation.x =  Math.sin(player.walkTime)*0.4;
+    rArm.rotation.x = -Math.sin(player.walkTime)*0.4;
+  }
+  // Invincible flash
+  const flash = player.invincible>0 && Math.floor(player.invincible/7)%2===0;
+  playerGroup.visible = !flash;
+  // Glow ring pulse
+  glowRing.scale.set(1+Math.sin(t*3)*0.1, 1, 1+Math.sin(t*3)*0.1);
+
+  // ── Third Person Camera ──
+  const camDist  = 10;
+  const camHeight = 6;
+  const camX = player.x - Math.sin(player.angle)*camDist;
+  const camZ = player.z - Math.cos(player.angle)*camDist;
+  camera.position.lerp(new THREE.Vector3(camX, camHeight, camZ), 0.1);
+  camera.lookAt(player.x, 1.5, player.z);
+
+  // ── Enemy faces player ──
+  const edx = player.x - enemy.x;
+  const edz = player.z - enemy.z;
+  enemy.angle = Math.atan2(edx, edz);
+  enemyGroup.rotation.y = enemy.angle;
+  // Enemy idle bob
+  enemyGroup.position.y = Math.sin(t*2)*0.1;
+  eRing.scale.set(1+Math.sin(t*4)*0.15, 1, 1+Math.sin(t*4)*0.15);
+
+  // ── Enemy shoot ──
+  enemy.shootTimer++;
+  if (enemy.shootTimer >= enemy.shootInterval) {
+    enemy.shootTimer=0;
+    spawnProjectile();
+  }
+
+  // ── Move projectiles ──
+  for (let i=projectiles.length-1;i>=0;i--) {
+    const p=projectiles[i];
+    p.mesh.position.x += p.vx;
+    p.mesh.position.z += p.vz;
+    p.mesh.rotation.y += 0.1;
+    p.life--;
+    if (p.life<=0||Math.abs(p.mesh.position.x)>50||Math.abs(p.mesh.position.z)>50) {
+      scene.remove(p.mesh); projectiles.splice(i,1); continue;
+    }
+    // Hit player
+    if (player.invincible===0) {
+      const hx=p.mesh.position.x-player.x, hz=p.mesh.position.z-player.z;
+      if (Math.sqrt(hx*hx+hz*hz)<1.2) {
+        scene.remove(p.mesh); projectiles.splice(i,1);
+        player.invincible=90; lives--;
+        spawnParticles(player.x,1.5,player.z,0xff4444);
+        updateHUD();
+        if (lives<=0) { endGame(false); return; }
+      }
+    }
+  }
+
+  // ── Gems ──
+  spawnTimer++;
+  if (spawnTimer>=180) { spawnTimer=0; spawnGem(); }
+  for (let i=collectibles.length-1;i>=0;i--) {
+    const c=collectibles[i];
+    c.time+=0.03;
+    c.mesh.rotation.y += 0.02;
+    c.mesh.position.y = 1.2 + Math.sin(c.time)*0.3;
+    const gx=c.mesh.position.x-player.x, gz=c.mesh.position.z-player.z;
+    if (Math.sqrt(gx*gx+gz*gz)<1.5) {
+      spawnParticles(c.mesh.position.x,1.2,c.mesh.position.z,0xffe066);
+      scene.remove(c.mesh); collectibles.splice(i,1);
+      score++; updateHUD();
+      if (score>=SCORE_WIN) { endGame(true); return; }
+    }
+  }
+
+  // ── Particles ──
+  for (let i=particles.length-1;i>=0;i--) {
+    const p=particles[i];
+    p.mesh.position.x+=p.vx; p.mesh.position.y+=p.vy; p.mesh.position.z+=p.vz;
+    p.vy-=0.003;
+    p.life--;
+    p.mesh.material.opacity = p.life/40;
+    p.mesh.material.transparent=true;
+    if (p.life<=0) { scene.remove(p.mesh); particles.splice(i,1); }
+  }
+
+  renderer.render(scene, camera);
+}
+
+// Initial render so something shows before start
+renderer.render(scene, camera);
 </script>
 </body>
 </html>
