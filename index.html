@@ -755,13 +755,8 @@ function updateBoss(t){
     boss.phase=2;showMsg('👹 BOSS ENRAGED! 💢');
     bossGroup.traverse(c=>{if(c.material)c.material.color.setHex(0xff0000);});
   }
-  // Move toward player (phase 2 faster)
-  const dist=Math.sqrt(dx*dx+dz*dz);
-  const spd=boss.phase===2?0.055:0.035;
-  if(dist>4){
-    boss.x+=(dx/dist)*spd; boss.z+=(dz/dist)*spd;
-    bossGroup.position.x=boss.x; bossGroup.position.z=boss.z;
-  }
+  // Boss apni jagah par fixed rehta hai — move nahi karta
+  // Sirf face karta hai player ko aur shoot karta hai
   // Normal shoot
   boss.shootTimer++;
   const interval=boss.phase===2?50:80;
