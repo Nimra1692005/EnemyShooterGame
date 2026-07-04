@@ -588,14 +588,18 @@ function hitEnemy(data,grp,dmg){
     if(data===boss){data.active=false;bossGroup.visible=false;bossHPDiv.style.display='none';}
     else{
       grp.visible=false;enemy.alive=false;
-      // Respawn new enemy after 3 seconds at random position
+      // FULL HP RESTORE on kill!
+      player.hp=player.maxHp;
+      updateHUD();
+      showMsg('❤️ FULL HP RESTORED! +Enemy Killed!');
+      // Respawn new enemy after 3 seconds
       setTimeout(()=>{
         if(!gameRunning) return;
         const angle=Math.random()*Math.PI*2;
         const dist=18+Math.random()*10;
         enemy.x=Math.cos(angle)*dist;
         enemy.z=Math.sin(angle)*dist;
-        enemy.hp=3+kills; // gets harder each time
+        enemy.hp=3+kills;
         enemy.alive=true;
         enemy.shootTimer=0;
         enemyGroup.position.set(enemy.x,0,enemy.z);
@@ -605,9 +609,10 @@ function hitEnemy(data,grp,dmg){
     }
     kills++;quests.kills++;player.xp+=data===boss?50:20;
     spawnParticles(grp.position.x,1.5,grp.position.z,0xff4400,20);
-    // Drop random power-up
-    spawnPowerUpGem(grp.position.x,grp.position.z);
-    showMsg(data===boss?'👹 BOSS DEFEATED! 🏆':'💀 Enemy Killed! +20 XP');
+    // FULL HEAL on enemy kill
+    player.hp=player.maxHp;
+    updateHUD();
+    showMsg(data===boss?'👹 BOSS DEFEATED! 🏆':'💀 Enemy Killed! ❤️ FULL HEAL!');
     updateHUD();updateQuestUI();
     if(data===boss){setTimeout(()=>endGame(true),2000);}
   }
@@ -989,5 +994,42 @@ function update(t){
 // Initial render
 renderer.render(scene,camera);
 </script>
+
+<!-- ON-SCREEN D-PAD BUTTONS -->
+<style>
+.dpbtn{width:54px;height:54px;font-size:22px;background:rgba(255,255,255,0.18);
+  border:2px solid rgba(255,255,255,0.45);border-radius:12px;color:white;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:none;}
+.dpbtn:active,.dpbtn.pressed{background:rgba(255,255,255,0.45);}
+.actbtn{width:58px;height:58px;font-size:18px;border:2px solid rgba(255,255,255,0.35);
+  border-radius:12px;color:white;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1px;-webkit-tap-highlight-color:transparent;touch-action:none;}
+.actbtn:active{opacity:0.55;}
+</style>
+
+<!-- LEFT SIDE: D-PAD -->
+<div style="position:fixed;bottom:90px;left:16px;z-index:15;user-select:none;">
+  <div style="display:grid;grid-template-columns:54px 54px 54px;grid-template-rows:54px 54px 54px;gap:5px;">
+    <div></div>
+    <button class="dpbtn" onpointerdown="keys['w']=true" onpointerup="keys['w']=false" onpointerleave="keys['w']=false">▲</button>
+    <div></div>
+    <button class="dpbtn" onpointerdown="keys['a']=true" onpointerup="keys['a']=false" onpointerleave="keys['a']=false">◀</button>
+    <button class="dpbtn" onpointerdown="keys['s']=true" onpointerup="keys['s']=false" onpointerleave="keys['s']=false">▼</button>
+    <button class="dpbtn" onpointerdown="keys['d']=true" onpointerup="keys['d']=false" onpointerleave="keys['d']=false">▶</button>
+  </div>
+</div>
+
+<!-- RIGHT SIDE: ACTION BUTTONS -->
+<div style="position:fixed;bottom:90px;right:16px;z-index:15;display:grid;grid-template-columns:58px 58px;gap:7px;user-select:none;">
+  <button class="actbtn" style="background:rgba(255,180,0,0.75);"
+    onpointerdown="swordAttack()">⚔️<span style="font-size:10px">Sword</span></button>
+  <button class="actbtn" style="background:rgba(0,200,255,0.75);"
+    onpointerdown="if(player.hasGun){selectSlot(1);handleAttack();}else{showMsg('3 gems collect karo!')}">🔫<span style="font-size:10px">Gun</span></button>
+  <button class="actbtn" style="background:rgba(0,220,80,0.75);"
+    onpointerdown="activateSpeed()">⚡<span style="font-size:10px">Speed</span></button>
+  <button class="actbtn" style="background:rgba(80,80,255,0.75);"
+    onpointerdown="activateShield()">🛡️<span style="font-size:10px">Shield</span></button>
+</div>
+
 </body>
 </html>
