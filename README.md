@@ -6,7 +6,11 @@ No installation required — just open in Chrome!
 ---
 
 ## 🌐 Play Online
-👉 **https://nimra1692005.github.io/EnemyShooterGame/**
+👉 **[Click Here to Play](https://nimra1692005.github.io/EnemyShooterGame/index.html)**
+
+```
+https://nimra1692005.github.io/EnemyShooterGame/index.html
+```
 
 ---
 
