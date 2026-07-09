@@ -135,8 +135,9 @@
 // ════════════════════════════════════════════════
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
-const W = canvas.width  = 800;
-const H = canvas.height = 600;
+// Make canvas responsive to window size
+const W = canvas.width  = window.innerWidth;
+const H = canvas.height = window.innerHeight;
 
 const TILE   = 48;           // tile size in pixels
 const MAP_W  = 30;           // tiles wide
